@@ -8,21 +8,8 @@ const { notFound, errorHandler } = require('./middleware/errorMiddleware');
 
 const app = express();
 
-// ---------------- DB CONNECTION (SAFE FOR VERCEL) ----------------
-let isConnected = false;
-
-const dbConnect = async () => {
-  if (isConnected) return;
-
-  try {
-    await connectDB();
-    isConnected = true;
-    console.log("MongoDB Connected");
-  } catch (err) {
-    console.error("DB Connection Error:", err.message);
-    throw err;
-  }
-};
+// ---------------- DB CONNECTION ----------------
+connectDB();
 
 // ---------------- MIDDLEWARE ----------------
 app.use(cors({
@@ -46,12 +33,10 @@ app.use('/api/auth', require('./routes/authRoutes'));
 app.use('/api/blogs', require('./routes/blogRoutes'));
 app.use('/api/interactions', require('./routes/interactionRoutes'));
 
-// test route
 app.post('/api/chat', (req, res) => {
   res.json({ reply: "InkFlow AI is ready!" });
 });
 
-// health check
 app.get('/api/health', (req, res) => {
   res.json({
     status: 'OK',
@@ -59,7 +44,6 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// root
 app.get('/', (req, res) => {
   res.send("InkFlow Backend Running 🚀");
 });
@@ -69,4 +53,4 @@ app.use(notFound);
 app.use(errorHandler);
 
 // ---------------- EXPORT ----------------
-module.exports = { app, dbConnect };
+module.exports = app;
