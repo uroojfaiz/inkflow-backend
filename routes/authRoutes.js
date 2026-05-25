@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const User = require('../models/User');
+const Notification = require('../models/Notification'); // Notification model import
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 
@@ -23,16 +24,14 @@ const protect = (req, res, next) => {
 
 // --- ROUTES ---
 
-// REGISTER
+// REGISTER & LOGIN (Existing logic same rahega)
 router.post('/register', async (req, res) => {
     try {
         const { name, email, password } = req.body;
         const userExists = await User.findOne({ email });
         if (userExists) return res.status(400).json({ message: "User already exists" });
-
         const salt = await bcrypt.genSalt(10);
         const hashedPassword = await bcrypt.hash(password, salt);
-
         const user = await User.create({ name, email, password: hashedPassword });
         res.status(201).json({ _id: user._id, name: user.name });
     } catch (error) {
@@ -40,16 +39,13 @@ router.post('/register', async (req, res) => {
     }
 });
 
-// LOGIN
 router.post('/login', async (req, res) => {
     try {
         const { email, password } = req.body;
         const user = await User.findOne({ email });
-        
         if (!user || !(await bcrypt.compare(password, user.password))) {
             return res.status(400).json({ message: "Invalid email or password" });
         }
-
         const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '30d' });
         res.json({ token, name: user.name });
     } catch (error) {
@@ -57,24 +53,20 @@ router.post('/login', async (req, res) => {
     }
 });
 
-// GET ME (Yeh route aapke Frontend ke /auth/me ke liye zaroori hai)
-router.get('/me', protect, async (req, res) => {
-    try {
-        // req.user.id wahi hai jo jwt.verify se decode hua tha
-        const user = await User.findById(req.user.id).select('-password');
-        if (!user) return res.status(404).json({ message: "User not found" });
-        res.json(user); // Ismein name aur email dono honge
-    } catch (error) {
-        res.status(500).json({ message: "Server error", error: error.message });
-    }
-});
-
-// GET PROFILE
+// GET PROFILE (Added stats: followers, following, likes)
 router.get('/profile', protect, async (req, res) => {
     try {
         const user = await User.findById(req.user.id).select('-password');
         if (!user) return res.status(404).json({ message: "User nahi mila" });
-        res.json({ user });
+        
+        // Stats calculate karein
+        const userData = {
+            ...user._doc,
+            followers: user.followers ? user.followers.length : 0,
+            following: user.following ? user.following.length : 0,
+            totalLikes: user.totalLikes || 0
+        };
+        res.json({ user: userData });
     } catch (error) {
         res.status(500).json({ message: "Profile error", error: error.message });
     }
@@ -85,12 +77,10 @@ router.put('/update-profile', protect, async (req, res) => {
     try {
         const { name, bio, profileImage } = req.body;
         const user = await User.findById(req.user.id);
-        
         if (user) {
             user.name = name || user.name;
             user.bio = bio || user.bio;
             user.profileImage = profileImage || user.profileImage;
-            
             const updatedUser = await user.save();
             res.json({ user: updatedUser });
         } else {
@@ -98,6 +88,18 @@ router.put('/update-profile', protect, async (req, res) => {
         }
     } catch (error) {
         res.status(500).json({ message: "Update error", error: error.message });
+    }
+});
+
+// GET NOTIFICATIONS
+router.get('/notifications', protect, async (req, res) => {
+    try {
+        const notifications = await Notification.find({ user: req.user.id })
+            .sort({ createdAt: -1 })
+            .populate('sender', 'name'); // Sender ka naam lana
+        res.json(notifications);
+    } catch (error) {
+        res.status(500).json({ message: "Error fetching notifications" });
     }
 });
 
